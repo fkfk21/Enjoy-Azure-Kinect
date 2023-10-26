@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "enjoy-azure-kinect"
+version = "0.1.0"
+description = ""
+authors = ["Kenji Fukuda <fk.kenji.21@gmail.com>"]
+readme = "README.md"
+# packages = [{include = "enjoy_azure_kinect"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+numpy = "^1.26.1"
+sounddevice = "^0.4.6"
+scipy = "^1.11.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
