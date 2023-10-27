@@ -189,9 +189,9 @@ class HARK_Main(hark.NetworkDef):
         node_localization_subscriber = network.create(
             hark.node.SubscribeData,
             name="LocalizationSubscriber")
-        # node_stream_subscriber = network.create(
-        #     hark.node.SubscribeData,
-        #     name="StreamSubscriber")
+        node_stream_subscriber = network.create(
+            hark.node.SubscribeData,
+            name="StreamSubscriber")
 
         node_audio_stream_from_memory = network.create(
             hark.node.AudioStreamFromMemory,
@@ -237,6 +237,10 @@ class HARK_Main(hark.NetworkDef):
         (
             node_localization_subscriber
             .add_input("INPUT", node_localization["OUTPUT"])
+        )
+        (
+            node_stream_subscriber
+            .add_input("INPUT", node_separation["WAVEFORM"])
         )
 
         # ネットワークに含まれるノードの一覧をリストにして返す
@@ -291,19 +295,37 @@ def main():
     # メインネットワークへの入出力を構築
     publisher = network.query_nodedef("Publisher")
     localization_subscriber = network.query_nodedef("LocalizationSubscriber")
+    stream_subscriber = network.query_nodedef("StreamSubscriber")
 
     last = [time.time()]
-    def received(data):
+    def localization_received(data):
         """
         data: List[harklib.Source]
         harklib.Source: id, power, x = [x, y, z]
+                        'compare_mode', 'count', 'first_found_count', 'id',
+                        'last_found_count', 'mic_id', 'power', 'remaining',
+                        'sub_id', 'tfindex', 'tfindex_max', 'tfindex_min', 'x'
         """
-        for d in data:
-            print(d.id, d.x, d.power)
+        # for d in data:
+        #     print(d.id, d.count, d.power)
+            # print(dir(d))
         # last[0] = t
         pass
 
-    localization_subscriber.receive = received
+    localization_subscriber.receive = localization_received
+
+    def stream_received(data):
+        """
+        data: List[np.ndarray]
+        """
+        # for d in data:
+        #     # print(d.id, d.x, d.power)
+        #     print(dir(d))
+        for id, arr in data.items():
+            print(id, arr.shape)
+        pass
+
+    stream_subscriber.receive = stream_received
 
     def callback(indata, frames, time, status):
         # print(indata.shape, time.currentTime)
