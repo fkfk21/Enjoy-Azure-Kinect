@@ -1,304 +1,58 @@
 #!/usr/bin/env python
 
+import rclpy
+from rclpy.node import Node
 import threading
 import time
 import argparse
 import tempfile
+from std_msgs.msg import Float64MultiArray
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-from numpy.lib.stride_tricks import sliding_window_view
 
 import hark
 
-import plotQuickWaveformKivy
-import plotQuickSpecKivy
-import plotQuickMusicSpecKivy
-import plotQuickSourceKivy
+from .hark_network import HARK_Main, SAMPLE_RATE, BLOCKSIZE, CHANNELS, DEVICE_NUM
 
-from tools import get_device_number
+class HARKExecutor(Node):
+    def __init__(self):
+        super().__init__('hark_executor_node')
+        self.publisher = self.create_publisher(Float64MultiArray, 'angle', 10)
 
-# 音源定位/分離パラメータ
-LOWER_BOUND_FREQUENCY = 300
-UPPER_BOUND_FREQUENCY = 3000
-BLOCKSIZE = 2048
-# マイクロフォンパラメータ
-DEVICE_NUM = get_device_number("Azure Kinect")
-SAMPLE_RATE = 48000
-CHANNELS = 7
+        ## empty timer callback
+        self.timer = self.create_timer(0.1, self.timer_callback)
 
-class HARK_Localization(hark.NetworkDef):
-    '''音源定位サブネットワークに相当するクラス。
-    入力として7ch音響信号を受け取り、
-    フーリエ変換、MUSIC法による音源定位、音源追跡を行い、
-    その結果を図示する。
-    '''
+        ## hark setting
+        filename = tempfile.mktemp(prefix='practice3-1a_', suffix='.wav', dir='')
 
-    def build(self,
-              network: hark.Network,
-              input:   hark.DataSourceMap,
-              output:  hark.DataSinkMap):
-        
-        # 必要なノードを定義する
-        node_localize_music = network.create(hark.node.LocalizeMUSIC)
-        node_cm_identity_matrix = network.create(
-            hark.node.CMIdentityMatrix,
-            dispatch=hark.RepeatDispatcher)
-        node_source_tracker = network.create(hark.node.SourceTracker)
-        node_source_interval_extender = network.create(
-            hark.node.SourceIntervalExtender)
-        node_plotsource_kivy = network.create(
-            plotQuickSourceKivy.plotQuickSourceKivy)
+        # メインネットワークを構築
+        self.hark_network = hark.Network.from_networkdef(HARK_Main, name="HARK_Main")
 
-        # ノード間の接続（データの流れ）とパラメータを記述する
-        (
-            node_localize_music
-            .add_input("INPUT", input["INPUT"])
-            .add_input("NOISECM", node_cm_identity_matrix["OUTPUT"])
-            .add_input("A_MATRIX", "tf.zip")
-            .add_input("MUSIC_ALGORITHM", "SEVD")
-            # .add_input("MUSIC_ALGORITHM", "GEVD")
-            # .add_input("MUSIC_ALGORITHM", "GSVD")
-            # .add_input("WINDOW_TYPE", "PAST")
-            # .add_input("WINDOW_TYPE", "MIDDLE")
-            .add_input("MIN_DEG", -180)
-            .add_input("MAX_DEG",  180)
-            .add_input("LOWER_BOUND_FREQUENCY", LOWER_BOUND_FREQUENCY)
-            .add_input("UPPER_BOUND_FREQUENCY", UPPER_BOUND_FREQUENCY)
-            .add_input("WINDOW", 50)
-            .add_input("PERIOD", 1)
-            .add_input("NUM_SOURCE", 2)
-            .add_input("DEBUG", False)
-        )
-        (
-            node_cm_identity_matrix
-            .add_input("NB_CHANNELS", CHANNELS)
-            .add_input("LENGTH", BLOCKSIZE)
-        )
-        (
-            node_source_tracker
-            .add_input("INPUT", node_localize_music["OUTPUT"])
-            .add_input("THRESH", 32)
-            .add_input("PAUSE_LENGTH", 1200.0)
-            .add_input("MIN_SRC_INTERVAL", 20.0)
-            .add_input("MIN_ID", 0)
-            .add_input("DEBUG", False)
-        )
-        (
-            node_source_interval_extender
-            .add_input("SOURCES", node_source_tracker["OUTPUT"])
-        )
-        (
-            node_plotsource_kivy
-            .add_input("SOURCES", node_source_tracker["OUTPUT"])
-        )
-        (
-            output
-            .add_input("OUTPUT", node_source_interval_extender["OUTPUT"])
-        )
+        # メインネットワークへの入出力を構築
+        self.audio_publisher = self.hark_network.query_nodedef("Publisher")
+        localization_subscriber = self.hark_network.query_nodedef("LocalizationSubscriber")
+        stream_subscriber = self.hark_network.query_nodedef("StreamSubscriber")
 
-        # ネットワークに含まれるノードの一覧をリストにする
-        r = [
-            node_localize_music,
-            node_cm_identity_matrix,
-            node_source_tracker,
-            node_plotsource_kivy,
-        ]
+        localization_subscriber.receive = self.hark_localization_received_callback 
+        stream_subscriber.receive = self.hark_stream_received_callback
 
-        # ノード一覧のリストを返す
-        return r
+        def callback(indata, frames, time, status):
+            # print(indata.shape, time.currentTime)
+            self.audio_publisher.push(indata.T)
+
+        # ネットワーク実行用スレッドを立ち上げ
+        self.network_thread = threading.Thread(target=self.hark_network.execute)
+        self.network_thread.start()
+
+        # ネットワーク実行
+        self.stream = sd.InputStream(samplerate=SAMPLE_RATE, blocksize=BLOCKSIZE,
+                                    device=DEVICE_NUM, dtype=np.int16,
+                                    channels=CHANNELS, callback=callback)
+        self.stream.start()
     
-class HARK_Separation(hark.NetworkDef):
-    '''音源分離サブネットワークに相当するクラス。
-    入力として7chスペクトログラムと音源定位結果を受け取り、
-    GHDSSによる音源分離を行い、その結果を出力する。
-    '''
-
-    def build(self,
-              network: hark.Network,
-              input:   hark.DataSourceMap,
-              output:  hark.DataSinkMap):
-
-        # 必要なノードを定義する
-        node_ghdss = network.create(hark.node.GHDSS)
-        node_synthesize = network.create(hark.node.Synthesize)
-        node_save_wave_pcm = network.create(hark.node.SaveWavePCM)
-
-        # ノード間の接続（データの流れ）とパラメータを記述する
-        (
-            node_ghdss
-            .add_input("INPUT_FRAMES", input["SPEC"])
-            .add_input("INPUT_SOURCES", input["SOURCES"])
-            .add_input("TF_CONJ_FILENAME", "tf.zip")
-            .add_input("SAMPLING_RATE", SAMPLE_RATE)
-            .add_input("LENGTH", BLOCKSIZE)
-            .add_input("LOWER_BOUND_FREQUENCY", 0)
-            .add_input("UPPER_BOUND_FREQUENCY", 8000)
-        )
-        (
-            node_synthesize
-            .add_input("INPUT", node_ghdss["OUTPUT"])
-            .add_input("LENGTH", BLOCKSIZE)
-            .add_input("ADVANCE", 160)
-            .add_input("SAMPLING_RATE", SAMPLE_RATE)
-            .add_input("WINDOW", "HAMMING")
-        )
-        (
-            node_save_wave_pcm
-            .add_input("INPUT", node_synthesize["OUTPUT"])
-            .add_input("SAMPLING_RATE", SAMPLE_RATE)
-        )
-        (
-            output
-            .add_input("SPECTRUM", node_ghdss["OUTPUT"])
-            .add_input("WAVEFORM", node_save_wave_pcm["OUTPUT"])
-        )
-
-        # ネットワークに含まれるノードの一覧をリストにする
-        r = [
-            node_ghdss,
-            node_synthesize,
-            node_save_wave_pcm,
-        ]
-
-        # ノード一覧のリストを返す
-        return r
-
-class HARK_Main(hark.NetworkDef):
-    '''メインネットワークに相当するクラス。
-    入力として7ch音響信号を受け取り、
-    フーリエ変換、MUSIC法による音源定位、音源追跡を行い、
-    その結果を図示する。
-    '''
-
-    def build(self,
-              network: hark.Network,
-              input:   hark.DataSourceMap,
-              output:  hark.DataSinkMap):
-
-        # 必要なノードを定義する。
-        # メインネットワークには全体の入出力を扱う
-        # Publisher と Subscriber が必要。
-        # さらに、AudioStreamFromMemoryノード、
-        # MultiFFTノード、音源定位サブネットワークを定義する。
-        node_publisher = network.create(
-            hark.node.PublishData,
-            dispatch=hark.RepeatDispatcher,
-            name="Publisher")
-        node_localization_subscriber = network.create(
-            hark.node.SubscribeData,
-            name="LocalizationSubscriber")
-        node_stream_subscriber = network.create(
-            hark.node.SubscribeData,
-            name="StreamSubscriber")
-
-        node_audio_stream_from_memory = network.create(
-            hark.node.AudioStreamFromMemory,
-            dispatch=hark.TriggeredMultiShotDispatcher)
-        node_multi_gain = network.create(hark.node.MultiGain)
-        node_multi_fft = network.create(hark.node.MultiFFT)
-        node_localization = network.create(
-            HARK_Localization,
-            name="HARK_Localization")
-        node_separation = network.create(
-            HARK_Separation,
-            name="HARK_Separation")
-
-        # ノード間の接続（データの流れ）を記述する
-        (
-            node_audio_stream_from_memory
-            .add_input("INPUT", node_publisher["OUTPUT"])
-            .add_input("CHANNEL_COUNT", CHANNELS)
-            .add_input("LENGTH", BLOCKSIZE)
-        )
-        (
-            node_multi_gain
-            .add_input("INPUT", node_audio_stream_from_memory["AUDIO"])
-            .add_input("GAIN", 2**3)
-        )
-        (
-            node_multi_fft
-            .add_input("INPUT", node_audio_stream_from_memory["AUDIO"])
-            # .add_input("INPUT", node_multi_gain[""])
-            .add_input("LENGTH", BLOCKSIZE)
-            .add_input("WINDOW_LENGTH", BLOCKSIZE)
-            .add_input("WINDOW", "HANNING")
-        )
-        (
-            node_localization
-            .add_input("INPUT", node_multi_fft["OUTPUT"])
-        )
-        (
-            node_separation
-            .add_input("SPEC", node_multi_fft["OUTPUT"])
-            .add_input("SOURCES", node_localization["OUTPUT"])
-        )
-        (
-            node_localization_subscriber
-            .add_input("INPUT", node_localization["OUTPUT"])
-        )
-        (
-            node_stream_subscriber
-            .add_input("INPUT", node_separation["WAVEFORM"])
-        )
-
-        # ネットワークに含まれるノードの一覧をリストにして返す
-        r = [
-            node_publisher,
-            node_localization_subscriber,
-            node_audio_stream_from_memory,
-            node_multi_gain,
-            node_multi_fft,
-            node_localization,
-        ]
-        return r
-
-
-def main():
-
-    def int_or_str(text):
-        """Helper function for argument parsing."""
-        try:
-            return int(text)
-        except ValueError:
-            return text
-
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument(
-        '-l', '--list-devices', action='store_true',
-        help='show list of audio devices and exit')
-    args, remaining = parser.parse_known_args()
-    if args.list_devices:
-        print(sd.query_devices())
-        parser.exit(0)
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        parents=[parser])
-    parser.add_argument(
-        'filename', nargs='?', metavar='FILENAME',
-        help='audio file to store recording to')
-    parser.add_argument(
-        '-t', '--subtype', type=str, help='sound file subtype (e.g. "PCM_24")')
-    args = parser.parse_args(remaining)
-
-    if args.filename is None:
-        args.filename = tempfile.mktemp(prefix='practice3-1a_',
-                                        suffix='.wav', dir='')
-    
-
-
-    # メインネットワークを構築
-    network = hark.Network.from_networkdef(HARK_Main, name="HARK_Main")
-
-    # メインネットワークへの入出力を構築
-    publisher = network.query_nodedef("Publisher")
-    localization_subscriber = network.query_nodedef("LocalizationSubscriber")
-    stream_subscriber = network.query_nodedef("StreamSubscriber")
-
-    last = [time.time()]
-    def localization_received(data):
+    def hark_localization_received_callback(self, data):
         """
         data: List[harklib.Source]
         harklib.Source: id, power, x = [x, y, z]
@@ -310,57 +64,74 @@ def main():
         #     print(d.id, d.count, d.power)
             # print(dir(d))
         # last[0] = t
+        msg = Float64MultiArray()
+        arr = []
+        for d in data:
+            x, y = d.x[0], d.x[1]
+            arr.append(np.arctan2(y, x))
+            print(np.rad2deg(np.arctan2(y,x)))
+        msg.data = arr
+        self.publisher.publish(msg)
         pass
 
-    localization_subscriber.receive = localization_received
-
-    def stream_received(data):
+    
+    def hark_stream_received_callback(self, data):
         """
         data: List[np.ndarray]
         """
         # for d in data:
         #     # print(d.id, d.x, d.power)
         #     print(dir(d))
-        for id, arr in data.items():
-            print(id, arr.shape)
+        # for id, arr in data.items():
+        #     print(id, arr.shape)
         pass
 
-    stream_subscriber.receive = stream_received
 
-    def callback(indata, frames, time, status):
-        # print(indata.shape, time.currentTime)
-        publisher.push(indata.T)
+    def timer_callback(self):
+        pass
 
-    # ネットワーク実行用スレッドを立ち上げ
-    th = threading.Thread(target=network.execute)
-    th.start()
+    def __del__(self):
+        if hasattr(self, 'stream'):
+            self.stream.stop()
+            self.stream.close()
+        if hasattr(self, 'hark_network'):
+            self.hark_network.stop()
+        if hasattr(self, 'audio_publisher'):
+            self.audio_publisher.close()
+        if hasattr(self, 'network_thread'):
+            self.network_thread.join()
+        
 
-    # ネットワーク実行
-    try:
-        with sd.InputStream(samplerate=SAMPLE_RATE, blocksize=BLOCKSIZE,
-                            device=DEVICE_NUM, dtype=np.int16,
-                            channels=CHANNELS, callback=callback) as stream:
-            print('#' * 75)
-            print('press Ctrl+C to stop the recording')
-            print('#' * 75)
-            th.join()
-            # while th.is_alive():
-            #     time.sleep(0.1)
-            
-    except KeyboardInterrupt:
-        print('\nRecording finished: ' + repr(args.filename))
-        parser.exit(0)
-    except Exception as e:
-        parser.exit(type(e).__name__ + ': ' + str(e))
 
-    # 終了処理
-    finally:
-        publisher.close()
-        network.stop()
-        th.join()
+def main(args=None):
+    ## ros node init
+    rclpy.init(args=args)
+    hark_executor_node = HARKExecutor()
+    rclpy.spin(hark_executor_node)
+    hark_executor_node.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == '__main__':
+    # parser = argparse.ArgumentParser(add_help=False)
+    # parser.add_argument(
+    #     '-l', '--list-devices', action='store_true',
+    #     help='show list of audio devices and exit')
+    # args, remaining = parser.parse_known_args()
+    # if args.list_devices:
+    #     print(sd.query_devices())
+    #     parser.exit(0)
+    # parser = argparse.ArgumentParser(
+    #     description=__doc__,
+    #     formatter_class=argparse.RawDescriptionHelpFormatter,
+    #     parents=[parser])
+    # parser.add_argument(
+    #     'filename', nargs='?', metavar='FILENAME',
+    #     help='audio file to store recording to')
+    # parser.add_argument(
+    #     '-t', '--subtype', type=str, help='sound file subtype (e.g. "PCM_24")')
+    # args = parser.parse_args(remaining)
+
     main()
 
 # end of file

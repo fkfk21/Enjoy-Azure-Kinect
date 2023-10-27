@@ -18,10 +18,10 @@ sd.wait()  # 録音が終了するまで待つ
 print("録音終了")
 
 # 各マイクロフォンのデータを別々のファイルに保存
-# for i in range(audio_data.shape[1]):
-#     filename = f"mic_{i+1}.wav"
-#     write(filename, fs, audio_data[:, i])
-#     print(f"{filename}に保存しました")
+for i in range(audio_data.shape[1]):
+    filename = f"mic_{i+1}.wav"
+    write(filename, fs, audio_data[:, i])
+    print(f"{filename}に保存しました")
 
 # マイクロフォンアレイのデータをファイルに保存
 filename = "mic_array.wav"
