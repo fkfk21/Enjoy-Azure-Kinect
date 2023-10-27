@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import sys
 import threading
 import time
 import argparse
@@ -18,6 +17,16 @@ import plotQuickSpecKivy
 import plotQuickMusicSpecKivy
 import plotQuickSourceKivy
 
+from tools import get_device_number
+
+# 音源定位/分離パラメータ
+LOWER_BOUND_FREQUENCY = 300
+UPPER_BOUND_FREQUENCY = 3000
+BLOCKSIZE = 2048
+# マイクロフォンパラメータ
+DEVICE_NUM = get_device_number("Azure Kinect")
+SAMPLE_RATE = 48000
+CHANNELS = 7
 
 class HARK_Localization(hark.NetworkDef):
     '''音源定位サブネットワークに相当するクラス。
@@ -48,13 +57,15 @@ class HARK_Localization(hark.NetworkDef):
             .add_input("INPUT", input["INPUT"])
             .add_input("NOISECM", node_cm_identity_matrix["OUTPUT"])
             .add_input("A_MATRIX", "tf.zip")
-            # .add_input("MUSIC_ALGORITHM", "SEVD")
+            .add_input("MUSIC_ALGORITHM", "SEVD")
             # .add_input("MUSIC_ALGORITHM", "GEVD")
-            .add_input("MUSIC_ALGORITHM", "GSVD")
+            # .add_input("MUSIC_ALGORITHM", "GSVD")
             # .add_input("WINDOW_TYPE", "PAST")
             # .add_input("WINDOW_TYPE", "MIDDLE")
-            .add_input("LOWER_BOUND_FREQUENCY", 400)
-            .add_input("UPPER_BOUND_FREQUENCY", 3000)
+            .add_input("MIN_DEG", -180)
+            .add_input("MAX_DEG",  180)
+            .add_input("LOWER_BOUND_FREQUENCY", LOWER_BOUND_FREQUENCY)
+            .add_input("UPPER_BOUND_FREQUENCY", UPPER_BOUND_FREQUENCY)
             .add_input("WINDOW", 50)
             .add_input("PERIOD", 1)
             .add_input("NUM_SOURCE", 2)
@@ -62,8 +73,8 @@ class HARK_Localization(hark.NetworkDef):
         )
         (
             node_cm_identity_matrix
-            .add_input("NB_CHANNELS", 7)
-            .add_input("LENGTH", 512)
+            .add_input("NB_CHANNELS", CHANNELS)
+            .add_input("LENGTH", BLOCKSIZE)
         )
         (
             node_source_tracker
@@ -80,11 +91,11 @@ class HARK_Localization(hark.NetworkDef):
         )
         (
             node_plotsource_kivy
-            .add_input("SOURCES", node_source_interval_extender["OUTPUT"])
+            .add_input("SOURCES", node_source_tracker["OUTPUT"])
         )
         (
             output
-            .add_input("OUTPUT", node_source_tracker["OUTPUT"])
+            .add_input("OUTPUT", node_source_interval_extender["OUTPUT"])
         )
 
         # ネットワークに含まれるノードの一覧をリストにする
@@ -120,16 +131,23 @@ class HARK_Separation(hark.NetworkDef):
             .add_input("INPUT_FRAMES", input["SPEC"])
             .add_input("INPUT_SOURCES", input["SOURCES"])
             .add_input("TF_CONJ_FILENAME", "tf.zip")
+            .add_input("SAMPLING_RATE", SAMPLE_RATE)
+            .add_input("LENGTH", BLOCKSIZE)
+            .add_input("LOWER_BOUND_FREQUENCY", 0)
+            .add_input("UPPER_BOUND_FREQUENCY", 8000)
         )
         (
             node_synthesize
             .add_input("INPUT", node_ghdss["OUTPUT"])
-            .add_input("LENGTH", 512)
+            .add_input("LENGTH", BLOCKSIZE)
             .add_input("ADVANCE", 160)
+            .add_input("SAMPLING_RATE", SAMPLE_RATE)
+            .add_input("WINDOW", "HAMMING")
         )
         (
             node_save_wave_pcm
             .add_input("INPUT", node_synthesize["OUTPUT"])
+            .add_input("SAMPLING_RATE", SAMPLE_RATE)
         )
         (
             output
@@ -168,13 +186,17 @@ class HARK_Main(hark.NetworkDef):
             hark.node.PublishData,
             dispatch=hark.RepeatDispatcher,
             name="Publisher")
-        node_subscriber = network.create(
+        node_localization_subscriber = network.create(
             hark.node.SubscribeData,
-            name="Subscriber")
+            name="LocalizationSubscriber")
+        # node_stream_subscriber = network.create(
+        #     hark.node.SubscribeData,
+        #     name="StreamSubscriber")
 
         node_audio_stream_from_memory = network.create(
             hark.node.AudioStreamFromMemory,
             dispatch=hark.TriggeredMultiShotDispatcher)
+        node_multi_gain = network.create(hark.node.MultiGain)
         node_multi_fft = network.create(hark.node.MultiFFT)
         node_localization = network.create(
             HARK_Localization,
@@ -187,11 +209,21 @@ class HARK_Main(hark.NetworkDef):
         (
             node_audio_stream_from_memory
             .add_input("INPUT", node_publisher["OUTPUT"])
-            .add_input("CHANNEL_COUNT", 7)
+            .add_input("CHANNEL_COUNT", CHANNELS)
+            .add_input("LENGTH", BLOCKSIZE)
+        )
+        (
+            node_multi_gain
+            .add_input("INPUT", node_audio_stream_from_memory["AUDIO"])
+            .add_input("GAIN", 2**3)
         )
         (
             node_multi_fft
             .add_input("INPUT", node_audio_stream_from_memory["AUDIO"])
+            # .add_input("INPUT", node_multi_gain[""])
+            .add_input("LENGTH", BLOCKSIZE)
+            .add_input("WINDOW_LENGTH", BLOCKSIZE)
+            .add_input("WINDOW", "HANNING")
         )
         (
             node_localization
@@ -203,15 +235,16 @@ class HARK_Main(hark.NetworkDef):
             .add_input("SOURCES", node_localization["OUTPUT"])
         )
         (
-            node_subscriber
+            node_localization_subscriber
             .add_input("INPUT", node_localization["OUTPUT"])
         )
 
         # ネットワークに含まれるノードの一覧をリストにして返す
         r = [
             node_publisher,
-            node_subscriber,
+            node_localization_subscriber,
             node_audio_stream_from_memory,
+            node_multi_gain,
             node_multi_fft,
             node_localization,
         ]
@@ -243,42 +276,34 @@ def main():
         'filename', nargs='?', metavar='FILENAME',
         help='audio file to store recording to')
     parser.add_argument(
-        '-d', '--device', type=int_or_str,
-        help='input device (numeric ID or substring)')
-    parser.add_argument(
-        '-r', '--samplerate', type=int, help='sampling rate')
-    parser.add_argument(
-        '-c', '--channels', type=int, default=1, help='number of input channels')
-    parser.add_argument(
         '-t', '--subtype', type=str, help='sound file subtype (e.g. "PCM_24")')
     args = parser.parse_args(remaining)
 
-    if args.samplerate is None:
-        device_info = sd.query_devices(args.device, 'input')
-        # soundfile expects an int, sounddevice provides a float:
-        args.samplerate = int(device_info['default_samplerate'])
-    if args.channels is None:
-        device_info = sd.query_devices(args.device, 'input')
-        args.channels = device_info['max_input_channels']
     if args.filename is None:
         args.filename = tempfile.mktemp(prefix='practice3-1a_',
                                         suffix='.wav', dir='')
+    
+
 
     # メインネットワークを構築
     network = hark.Network.from_networkdef(HARK_Main, name="HARK_Main")
 
     # メインネットワークへの入出力を構築
     publisher = network.query_nodedef("Publisher")
-    subscriber = network.query_nodedef("Subscriber")
+    localization_subscriber = network.query_nodedef("LocalizationSubscriber")
 
     last = [time.time()]
     def received(data):
-        # t = time.time()
-        print(type(data))
+        """
+        data: List[harklib.Source]
+        harklib.Source: id, power, x = [x, y, z]
+        """
+        for d in data:
+            print(d.id, d.x, d.power)
         # last[0] = t
         pass
 
-    subscriber.receive = received
+    localization_subscriber.receive = received
 
     def callback(indata, frames, time, status):
         # print(indata.shape, time.currentTime)
@@ -290,9 +315,9 @@ def main():
 
     # ネットワーク実行
     try:
-        with sd.InputStream(samplerate=args.samplerate, blocksize=2048,
-                            device=args.device, dtype=np.int16,
-                            channels=args.channels, callback=callback) as stream:
+        with sd.InputStream(samplerate=SAMPLE_RATE, blocksize=BLOCKSIZE,
+                            device=DEVICE_NUM, dtype=np.int16,
+                            channels=CHANNELS, callback=callback) as stream:
             print('#' * 75)
             print('press Ctrl+C to stop the recording')
             print('#' * 75)
