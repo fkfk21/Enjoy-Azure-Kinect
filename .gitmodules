@@ -1,0 +1,3 @@
+[submodule "extern/hark-tutorial-2022-practice3"]
+	path = extern/hark-tutorial-2022-practice3
+	url = git@github.com:kokuju/hark-tutorial-2022-practice3.git

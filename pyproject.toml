@@ -7,10 +7,12 @@ readme = "README.md"
 # packages = [{include = "enjoy_azure_kinect"}]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-numpy = "^1.26.1"
+python = ">=3.8,<3.12"
+numpy = "^1.24.4"
 sounddevice = "^0.4.6"
-scipy = "^1.11.3"
+scipy = "^1.10.1"
+ipython = "^8.9.0"
+
 
 
 [build-system]
