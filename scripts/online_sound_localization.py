@@ -37,6 +37,8 @@ class HARK_Localization(hark.NetworkDef):
             hark.node.CMIdentityMatrix,
             dispatch=hark.RepeatDispatcher)
         node_source_tracker = network.create(hark.node.SourceTracker)
+        node_source_interval_extender = network.create(
+            hark.node.SourceIntervalExtender)
         node_plotsource_kivy = network.create(
             plotQuickSourceKivy.plotQuickSourceKivy)
 
@@ -66,15 +68,19 @@ class HARK_Localization(hark.NetworkDef):
         (
             node_source_tracker
             .add_input("INPUT", node_localize_music["OUTPUT"])
-            .add_input("THRESH", 31.0)
+            .add_input("THRESH", 32)
             .add_input("PAUSE_LENGTH", 1200.0)
             .add_input("MIN_SRC_INTERVAL", 20.0)
             .add_input("MIN_ID", 0)
             .add_input("DEBUG", False)
         )
         (
-            node_plotsource_kivy
+            node_source_interval_extender
             .add_input("SOURCES", node_source_tracker["OUTPUT"])
+        )
+        (
+            node_plotsource_kivy
+            .add_input("SOURCES", node_source_interval_extender["OUTPUT"])
         )
         (
             output
@@ -92,6 +98,54 @@ class HARK_Localization(hark.NetworkDef):
         # ノード一覧のリストを返す
         return r
     
+class HARK_Separation(hark.NetworkDef):
+    '''音源分離サブネットワークに相当するクラス。
+    入力として7chスペクトログラムと音源定位結果を受け取り、
+    GHDSSによる音源分離を行い、その結果を出力する。
+    '''
+
+    def build(self,
+              network: hark.Network,
+              input:   hark.DataSourceMap,
+              output:  hark.DataSinkMap):
+
+        # 必要なノードを定義する
+        node_ghdss = network.create(hark.node.GHDSS)
+        node_synthesize = network.create(hark.node.Synthesize)
+        node_save_wave_pcm = network.create(hark.node.SaveWavePCM)
+
+        # ノード間の接続（データの流れ）とパラメータを記述する
+        (
+            node_ghdss
+            .add_input("INPUT_FRAMES", input["SPEC"])
+            .add_input("INPUT_SOURCES", input["SOURCES"])
+            .add_input("TF_CONJ_FILENAME", "tf.zip")
+        )
+        (
+            node_synthesize
+            .add_input("INPUT", node_ghdss["OUTPUT"])
+            .add_input("LENGTH", 512)
+            .add_input("ADVANCE", 160)
+        )
+        (
+            node_save_wave_pcm
+            .add_input("INPUT", node_synthesize["OUTPUT"])
+        )
+        (
+            output
+            .add_input("SPECTRUM", node_ghdss["OUTPUT"])
+            .add_input("WAVEFORM", node_save_wave_pcm["OUTPUT"])
+        )
+
+        # ネットワークに含まれるノードの一覧をリストにする
+        r = [
+            node_ghdss,
+            node_synthesize,
+            node_save_wave_pcm,
+        ]
+
+        # ノード一覧のリストを返す
+        return r
 
 class HARK_Main(hark.NetworkDef):
     '''メインネットワークに相当するクラス。
@@ -125,6 +179,9 @@ class HARK_Main(hark.NetworkDef):
         node_localization = network.create(
             HARK_Localization,
             name="HARK_Localization")
+        node_separation = network.create(
+            HARK_Separation,
+            name="HARK_Separation")
 
         # ノード間の接続（データの流れ）を記述する
         (
@@ -139,6 +196,11 @@ class HARK_Main(hark.NetworkDef):
         (
             node_localization
             .add_input("INPUT", node_multi_fft["OUTPUT"])
+        )
+        (
+            node_separation
+            .add_input("SPEC", node_multi_fft["OUTPUT"])
+            .add_input("SOURCES", node_localization["OUTPUT"])
         )
         (
             node_subscriber
@@ -212,7 +274,7 @@ def main():
     last = [time.time()]
     def received(data):
         # t = time.time()
-        # print(data, t - last[0])
+        print(type(data))
         # last[0] = t
         pass
 
