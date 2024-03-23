@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'hark_executor_node = scripts.online_sound_localization:main'
+            'hark_executor_node = scripts.online_sound_localization:main',
+            'compress_image_node = scripts.compress_image:main'
         ],
     },
 )

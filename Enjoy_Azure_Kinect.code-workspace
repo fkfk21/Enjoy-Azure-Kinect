@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../target_extractor"
+		}
+	],
+	"settings": {}
+}
