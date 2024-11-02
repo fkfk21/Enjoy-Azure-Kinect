@@ -8,13 +8,11 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 
-const std::string TOPIC_NAME = "//image_raw";
-
 class ImageCompressor : public rclcpp::Node {
 public:
-  ImageCompressor() : Node("image_compressor") {
+  ImageCompressor(const std::string& topic_name) : Node("image_compressor") {
     // パラメータを宣言
-    this->declare_parameter<std::string>("input_topic", TOPIC_NAME);
+    this->declare_parameter<std::string>("input_topic", topic_name);
     std::string input_topic = this->get_parameter("input_topic").as_string();
     RCLCPP_INFO(this->get_logger(), "Subscribed to topic: %s", input_topic.c_str());
 

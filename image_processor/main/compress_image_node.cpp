@@ -7,10 +7,20 @@
 
 #include "image_processor/image_compressor.hpp"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char **argv){
     rclcpp::init(argc, argv);
-    auto image_compressor = std::make_shared<ImageCompressor>();
-    rclcpp::spin(image_compressor);
+    rclcpp::executors::MultiThreadedExecutor exec;
+
+    std::vector<std::shared_ptr<rclcpp::Node>> nodes = {
+        std::make_shared<ImageCompressor>("/rgb/image_raw"),
+        std::make_shared<ImageCompressor>("/depth_to_rgb/image_raw"),
+        std::make_shared<ImageCompressor>("/depth/image_raw"),
+    };
+
+    for (const auto& node : nodes) {
+        exec.add_node(node);
+    }
+    exec.spin();
     rclcpp::shutdown();
     return 0;
 }
