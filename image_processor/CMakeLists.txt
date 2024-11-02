@@ -16,23 +16,31 @@ find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(cv_bridge REQUIRED)
 
 
 #--- for C++
 include_directories(include)
-add_executable(compress_image_node src/compress_image_node.cpp)
-ament_target_dependencies(compress_image_node
-  rclcpp
-  std_msgs
-  sensor_msgs
-  cv_bridge
-)
 
-install(TARGETS
-  compress_image_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+function(add_executable_custom exec_name source)
+  add_executable(${exec_name} ${source})
+  ament_target_dependencies(${exec_name}
+    rclcpp
+    std_msgs
+    sensor_msgs
+    std_srvs
+    cv_bridge
+  )
+  install(TARGETS ${exec_name}
+    DESTINATION lib/${PROJECT_NAME}
+  )
+  # target_link_libraries()
+endfunction()
+
+add_executable_custom(compress_image_node main/compress_image_node.cpp)
+add_executable_custom(extract_target_node main/extract_target_node.cpp)
+
 #--- end C++
 
 #-- for Python
