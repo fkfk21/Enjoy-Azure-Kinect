@@ -15,16 +15,28 @@ find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+
 
 #--- for C++
 include_directories(include)
-add_executable(cpp_node src/cpp_node.cpp)
-ament_target_dependencies(cpp_node rclcpp std_msgs)
 
-install(TARGETS
-  cpp_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+function(add_executable_custom exec_name source)
+  add_executable(${exec_name} ${source})
+  ament_target_dependencies(${exec_name}
+    rclcpp
+    std_msgs
+    sensor_msgs
+  )
+  install(TARGETS ${exec_name}
+    DESTINATION lib/${PROJECT_NAME}
+  )
+  # target_link_libraries()
+endfunction()
+
+# add_executable_custom(compress_image_node main/compress_image_node.cpp)
+# add_executable_custom(extract_target_node main/extract_target_node.cpp)
+
 #--- end C++
 
 #-- for Python
@@ -37,3 +49,4 @@ install(PROGRAMS
 #--- end Python
 
 ament_package()
+
