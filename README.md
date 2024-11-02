@@ -89,25 +89,31 @@ Azure Kinect Microphone Array
 
 
 ### install nodejs
-[reference](https://github.com/nodesource/distributions#installation-instructions)
 
-```
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-```
-
-```
-set NODE_MAJOR 18
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
+install nodejs through n
+```bash
+sudo apt install nodejs npm
+sudo npm install n -g
+sudo n lts
+sudo n 16
+sudo apt purge nodejs npm
 ```
 
+check version
+```bash
+npm -v
+node -v
 ```
-sudo apt update
-```
+
 
 ### install hark
+
+[reference](https://hark.jp/install/linux/)
+```bash
+sudo curl -sSL http://archive.hark.jp/harkrepos/public.gpg -o /usr/share/keyrings/hark-archive-keyring.asc
+sudo bash -c 'echo -e "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hark-archive-keyring.asc] http://archive.hark.jp/harkrepos $(lsb_release -cs) non-free\ndeb-src [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hark-archive-keyring.asc] http://archive.hark.jp/harkrepos $(lsb_release -cs) non-free" > /etc/apt/sources.list.d/hark.list'
+```
+
 
 ```
 sudo apt install hark-base harkmw hark-core hark-designer harktool5 harktool5-gui kaldidecoder-hark
@@ -154,14 +160,17 @@ source buildでinstall
 [reference](https://hark.jp/packages/hark-acoustic-library-hark-lib/hark-lib-source-compilation-v1/)
 
 ```bash
+cd Enjoy_Azure_Kinect
 sudo apt install libhark-lib
-mkdir tmp
-cd tmp
-apt source libhark-lib
+apt source libhark-lib && rm libhark-lib-1.1.1.dsc libhark-lib-1.1.1.tar.xz  # libhark-lib-${HARK_VERSION} フォルダできる
 
-### libhark-lib-${HARK_VERSION} フォルダできる
-cd ${PYTHON_PROJECT_FOLDER}
-poetry add ${PATH_TO_TMP}/libhark-lib-${HARK_VERSION}
+# poetryに追加する場合
+# poetry add ${PATH_TO_TMP}/libhark-lib-${HARK_VERSION}
+# or
+# pyproject.tomlに入っている場合
+poetry install --no-root
+
+poetry run pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
 
 ```
 

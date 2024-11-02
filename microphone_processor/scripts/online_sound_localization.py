@@ -11,10 +11,9 @@ import sounddevice as sd
 
 import hark
 
-from ..microphone_processor.hark_network import (
+from microphone_processor.hark_network import (
   HARK_Main, SAMPLE_RATE, BLOCKSIZE, CHANNELS, DEVICE_NUM
 )
-
 
 class HARKExecutor(Node):
 
@@ -40,10 +39,10 @@ class HARKExecutor(Node):
         self.audio_publisher = self.hark_network.query_nodedef("Publisher")
         localization_subscriber = self.hark_network.query_nodedef(
             "LocalizationSubscriber")
-        stream_subscriber = self.hark_network.query_nodedef("StreamSubscriber")
+        # stream_subscriber = self.hark_network.query_nodedef("StreamSubscriber")
 
         localization_subscriber.receive = self.hark_localization_received_callback
-        stream_subscriber.receive = self.hark_stream_received_callback
+        # stream_subscriber.receive = self.hark_stream_received_callback
 
         def callback(indata, frames, time, status):
             # print(indata.shape, time.currentTime)

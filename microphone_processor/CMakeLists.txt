@@ -50,5 +50,12 @@ install(PROGRAMS
 )
 #--- end Python
 
+install(
+  DIRECTORY
+  # launch
+  config
+  DESTINATION share/${PROJECT_NAME}
+)
+
 ament_package()
 

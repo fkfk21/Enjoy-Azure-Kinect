@@ -3,17 +3,19 @@ import hark
 import plotQuickSourceKivy
 import os
 from .tools import get_device_number
+from ament_index_python.packages import get_package_share_directory
 
 # 音源定位/分離パラメータ
 LOWER_BOUND_FREQUENCY = 300
 UPPER_BOUND_FREQUENCY = 3000
-BLOCKSIZE = 2048
+BLOCKSIZE = 512
 # マイクロフォンパラメータ
 DEVICE_NUM = get_device_number("Azure Kinect")
 SAMPLE_RATE = 48000
 CHANNELS = 7
 TF_ZIP = "tf.zip"
-TF_ZIP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), TF_ZIP)
+PACKAGE_DIR = get_package_share_directory("microphone_processor")
+TF_ZIP_PATH = os.path.join(PACKAGE_DIR, 'config', TF_ZIP)
 
 class HARK_Localization(hark.NetworkDef):
     '''音源定位サブネットワークに相当するクラス。
@@ -49,12 +51,12 @@ class HARK_Localization(hark.NetworkDef):
             # .add_input("MUSIC_ALGORITHM", "GSVD")
             # .add_input("WINDOW_TYPE", "PAST")
             # .add_input("WINDOW_TYPE", "MIDDLE")
-            .add_input("MIN_DEG", -180)
-            .add_input("MAX_DEG",  180)
+            .add_input("MIN_DEG", -70)
+            .add_input("MAX_DEG",  70)
             .add_input("LOWER_BOUND_FREQUENCY", LOWER_BOUND_FREQUENCY)
             .add_input("UPPER_BOUND_FREQUENCY", UPPER_BOUND_FREQUENCY)
             .add_input("WINDOW", 50)
-            .add_input("PERIOD", 1)
+            .add_input("PERIOD", 10)
             .add_input("NUM_SOURCE", 2)
             .add_input("DEBUG", False)
         )
@@ -273,9 +275,9 @@ class HARK_Main(hark.NetworkDef):
         node_localization_subscriber = network.create(
             hark.node.SubscribeData,
             name="LocalizationSubscriber")
-        node_stream_subscriber = network.create(
-            hark.node.SubscribeData,
-            name="StreamSubscriber")
+        # node_stream_subscriber = network.create(
+        #     hark.node.SubscribeData,
+        #     name="StreamSubscriber")
 
         node_audio_stream_from_memory = network.create(
             hark.node.AudioStreamFromMemory,
@@ -285,9 +287,9 @@ class HARK_Main(hark.NetworkDef):
         node_localization = network.create(
             HARK_Localization,
             name="HARK_Localization")
-        node_separation = network.create(
-            HARK_Separation,
-            name="HARK_Separation")
+        # node_separation = network.create(
+        #     HARK_Separation,
+        #     name="HARK_Separation")
 
         # ノード間の接続（データの流れ）を記述する
         (
@@ -313,19 +315,19 @@ class HARK_Main(hark.NetworkDef):
             node_localization
             .add_input("INPUT", node_multi_fft["OUTPUT"])
         )
-        (
-            node_separation
-            .add_input("SPEC", node_multi_fft["OUTPUT"])
-            .add_input("SOURCES", node_localization["OUTPUT"])
-        )
+        # (
+        #     node_separation
+        #     .add_input("SPEC", node_multi_fft["OUTPUT"])
+        #     .add_input("SOURCES", node_localization["OUTPUT"])
+        # )
         (
             node_localization_subscriber
             .add_input("INPUT", node_localization["OUTPUT"])
         )
-        (
-            node_stream_subscriber
-            .add_input("INPUT", node_separation["WAVEFORM"])
-        )
+        # (
+        #     node_stream_subscriber
+        #     .add_input("INPUT", node_separation["WAVEFORM"])
+        # )
 
         # ネットワークに含まれるノードの一覧をリストにして返す
         r = [
@@ -335,6 +337,6 @@ class HARK_Main(hark.NetworkDef):
             node_multi_gain,
             node_multi_fft,
             node_localization,
-            node_stream_subscriber
+            # node_stream_subscriber
         ]
         return r
