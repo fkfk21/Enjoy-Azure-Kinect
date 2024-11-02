@@ -43,6 +43,8 @@ endfunction()
 ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
+  scripts/online_sound_localization.py
+  scripts/show_audio_devices.py
   scripts/py_node.py
   DESTINATION lib/${PROJECT_NAME}
 )

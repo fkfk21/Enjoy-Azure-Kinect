@@ -1,3 +1,0 @@
-#!/usr/bin/env python3
-
-# from microphone_processor.import_module import ....

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 '''PyHARK（オフライン処理）で音源定位を行うプログラム。
 引数としてTAMAGOで収録した8ch音響信号を受け取り、
 音源定位を行い結果を表示する。
@@ -18,6 +17,7 @@ import hark
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
+
 def psource(tsources):
     # 音源が存在する時刻と方位角を格納するdictオブジェクト
     # デフォルトの値（存在しないキーにアクセスしたときの）が空リストとなるように設定
@@ -26,19 +26,20 @@ def psource(tsources):
 
     for i, frame_sources in enumerate(tsources):
         for j, source in enumerate(frame_sources):
-            #print("frame {} , source {} , source-id {}:".format(i, j, source.id))
+            # print("frame {} , source {} , source-id {}:".format(i, j, source.id))
 
             # フレーム番号を時刻（秒）に変換
-            sources_time[source.id].append(i/100)
+            sources_time[source.id].append(i / 100)
 
             # 音源の仰角を計算（2次元定位では使用しない）
-            # theta = np.arctan2(source.x[2], np.sqrt(sum(map(lambda x: x**2, [source.x[0], source.x[1]]))))
+            # theta = np.arctan2(
+            #           source.x[2], np.sqrt(sum(map(lambda x: x**2, [source.x[0], source.x[1]]))))
 
             # 音源の方位角を計算
             phi = np.arctan2(source.x[1], source.x[0])
 
             # ラジアンを度に変換して sources_azimuth に格納
-            sources_azimuth[source.id].append(phi*180/np.pi)
+            sources_azimuth[source.id].append(phi * 180 / np.pi)
 
     # プロットに用いる fig オブジェクトと ax オブジェクトを作成
     fig = plt.figure(facecolor="white")
@@ -53,7 +54,6 @@ def psource(tsources):
     # ウインドウが表示されている間は後続の処理をブロックする
     # ウインドウを閉じると後続の処理を再開する
     plt.show()
-
 
 
 def main():
@@ -95,30 +95,28 @@ def main():
     # Numpyのブロードキャスト機能で配列のインデックスを拡張する。
     noise_cm = np.broadcast_to(
         np.eye(nch, dtype=np.complex64).flatten(),
-        (frames.shape[0], frame_size//2+1, nch*nch))
+        (frames.shape[0], frame_size // 2 + 1, nch * nch))
 
     # MUSIC法による音源定位（MUSICスペクトルの計算）を行う
     localize_music = hark.node.LocalizeMUSIC()
-    music_spec = localize_music(
-        INPUT=spec.OUTPUT,
-        A_MATRIX='tf.zip',
-        MUSIC_ALGORITHM='SEVD',
-        NOISECM=noise_cm,
-        LOWER_BOUND_FREQUENCY=3000,
-        UPPER_BOUND_FREQUENCY=6000,
-        WINDOW=50,
-        PERIOD=1,
-        WINDOW_TYPE='PAST',
-        NUM_SOURCE=2)
+    music_spec = localize_music(INPUT=spec.OUTPUT,
+                                A_MATRIX='tf.zip',
+                                MUSIC_ALGORITHM='SEVD',
+                                NOISECM=noise_cm,
+                                LOWER_BOUND_FREQUENCY=3000,
+                                UPPER_BOUND_FREQUENCY=6000,
+                                WINDOW=50,
+                                PERIOD=1,
+                                WINDOW_TYPE='PAST',
+                                NUM_SOURCE=2)
     print("LocalizeMUSIC processing ...")
 
     # MUSICスペクトルに対して音源追跡処理を行い音源を検出する
     source_tracker = hark.node.SourceTracker()
-    src_info = source_tracker(
-        INPUT=music_spec.OUTPUT,
-        THRESH=27.0,
-        PAUSE_LENGTH=1500.0,
-        MIN_SRC_INTERVAL=20.0)
+    src_info = source_tracker(INPUT=music_spec.OUTPUT,
+                              THRESH=27.0,
+                              PAUSE_LENGTH=1500.0,
+                              MIN_SRC_INTERVAL=20.0)
 
     # 音源定位結果を図示する
     psource(src_info.OUTPUT)
@@ -129,10 +127,9 @@ def main():
 
     # GHDSSによる音源分離処理を行う
     ghdss = hark.node.GHDSS()
-    ghdss_output = ghdss(
-        INPUT_FRAMES=spec.OUTPUT,
-        INPUT_SOURCES=src_info.OUTPUT,
-        TF_CONJ_FILENAME='tf.zip')
+    ghdss_output = ghdss(INPUT_FRAMES=spec.OUTPUT,
+                         INPUT_SOURCES=src_info.OUTPUT,
+                         TF_CONJ_FILENAME='tf.zip')
     print("GHDSS processing ...")
 
     # 必要に応じて分離音をWAVファイルとして保存する
@@ -140,14 +137,10 @@ def main():
     synthesize_output = synthesize(INPUT=ghdss_output.OUTPUT, OUTPUT_GAIN=16.0)
 
     save_wave_pcm = hark.node.SaveWavePCM()
-    save_wave_pcm_output = save_wave_pcm(INPUT=synthesize_output.OUTPUT)
+    save_wave_pcm(INPUT=synthesize_output.OUTPUT)
     print("SAVE_WAVE_PCM")
     sys.exit()
 
 
 if __name__ == '__main__':
     main()
-
-
-import hark
-

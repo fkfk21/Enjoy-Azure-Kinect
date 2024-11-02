@@ -1,14 +1,12 @@
-import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write
-from isort import file
-from tools import get_device_number
+from microphone_processor.tools import get_device_number
 
 # 録音の設定
 fs = 48000  # サンプリング周波数
 duration = 5  # 録音時間（秒）
 channels = 7
-device_num = get_device_number("Azure Kinect") # マイクロフォンアレイのデバイス番号
+device_num = get_device_number("Azure Kinect")  # マイクロフォンアレイのデバイス番号
 
 # マイクロフォンアレイからの録音
 print("録音開始...")

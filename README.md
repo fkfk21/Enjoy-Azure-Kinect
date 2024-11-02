@@ -149,4 +149,22 @@ card 3: Array [Azure Kinect Microphone Array], device 0: USB Audio [USB Audio]
 
 [reference](https://hark.jp/packages/hark-acoustic-library-hark-lib/hark-lib-package-installation/)
 
+source buildでinstall
+
+[reference](https://hark.jp/packages/hark-acoustic-library-hark-lib/hark-lib-source-compilation-v1/)
+
+```bash
+sudo apt install libhark-lib
+mkdir tmp
+cd tmp
+apt source libhark-lib
+
+### libhark-lib-${HARK_VERSION} フォルダできる
+cd ${PYTHON_PROJECT_FOLDER}
+poetry add ${PATH_TO_TMP}/libhark-lib-${HARK_VERSION}
+
+```
+
+
+
 ### 

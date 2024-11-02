@@ -3,39 +3,46 @@
 import rclpy
 from rclpy.node import Node
 import threading
-import time
-import argparse
-import tempfile
+# import tempfile
 from std_msgs.msg import Float64MultiArray
 
 import numpy as np
 import sounddevice as sd
-import soundfile as sf
 
 import hark
 
-from .hark_network import HARK_Main, SAMPLE_RATE, BLOCKSIZE, CHANNELS, DEVICE_NUM
+from ..microphone_processor.hark_network import (
+  HARK_Main, SAMPLE_RATE, BLOCKSIZE, CHANNELS, DEVICE_NUM
+)
+
 
 class HARKExecutor(Node):
+
     def __init__(self):
         super().__init__('hark_executor_node')
         self.publisher = self.create_publisher(Float64MultiArray, 'angle', 10)
 
-        ## empty timer callback
+        # empty timer callback
         self.timer = self.create_timer(0.1, self.timer_callback)
 
-        ## hark setting
-        filename = tempfile.mktemp(prefix='practice3-1a_', suffix='.wav', dir='')
+        """
+            hark settings
+        """
+        # filename = tempfile.mktemp(prefix='practice3-1a_',
+        #                            suffix='.wav',
+        #                            dir='')
 
         # メインネットワークを構築
-        self.hark_network = hark.Network.from_networkdef(HARK_Main, name="HARK_Main")
+        self.hark_network = hark.Network.from_networkdef(HARK_Main,
+                                                         name="HARK_Main")
 
         # メインネットワークへの入出力を構築
         self.audio_publisher = self.hark_network.query_nodedef("Publisher")
-        localization_subscriber = self.hark_network.query_nodedef("LocalizationSubscriber")
+        localization_subscriber = self.hark_network.query_nodedef(
+            "LocalizationSubscriber")
         stream_subscriber = self.hark_network.query_nodedef("StreamSubscriber")
 
-        localization_subscriber.receive = self.hark_localization_received_callback 
+        localization_subscriber.receive = self.hark_localization_received_callback
         stream_subscriber.receive = self.hark_stream_received_callback
 
         def callback(indata, frames, time, status):
@@ -43,15 +50,19 @@ class HARKExecutor(Node):
             self.audio_publisher.push(indata.T)
 
         # ネットワーク実行用スレッドを立ち上げ
-        self.network_thread = threading.Thread(target=self.hark_network.execute)
+        self.network_thread = threading.Thread(
+            target=self.hark_network.execute)
         self.network_thread.start()
 
         # ネットワーク実行
-        self.stream = sd.InputStream(samplerate=SAMPLE_RATE, blocksize=BLOCKSIZE,
-                                    device=DEVICE_NUM, dtype=np.int16,
-                                    channels=CHANNELS, callback=callback)
+        self.stream = sd.InputStream(samplerate=SAMPLE_RATE,
+                                     blocksize=BLOCKSIZE,
+                                     device=DEVICE_NUM,
+                                     dtype=np.int16,
+                                     channels=CHANNELS,
+                                     callback=callback)
         self.stream.start()
-    
+
     def hark_localization_received_callback(self, data):
         """
         data: List[harklib.Source]
@@ -62,19 +73,18 @@ class HARKExecutor(Node):
         """
         # for d in data:
         #     print(d.id, d.count, d.power)
-            # print(dir(d))
+        # print(dir(d))
         # last[0] = t
         msg = Float64MultiArray()
         arr = []
         for d in data:
             x, y = d.x[0], d.x[1]
             arr.append(np.arctan2(y, x))
-            print(np.rad2deg(np.arctan2(y,x)))
+            print(np.rad2deg(np.arctan2(y, x)))
         msg.data = arr
         self.publisher.publish(msg)
         pass
 
-    
     def hark_stream_received_callback(self, data):
         """
         data: List[np.ndarray]
@@ -85,7 +95,6 @@ class HARKExecutor(Node):
         # for id, arr in data.items():
         #     print(id, arr.shape)
         pass
-
 
     def timer_callback(self):
         pass
@@ -100,11 +109,10 @@ class HARKExecutor(Node):
             self.audio_publisher.close()
         if hasattr(self, 'network_thread'):
             self.network_thread.join()
-        
 
 
 def main(args=None):
-    ## ros node init
+    # ros node init
     rclpy.init(args=args)
     hark_executor_node = HARKExecutor()
     rclpy.spin(hark_executor_node)

@@ -1,8 +1,5 @@
 import hark
 
-import plotQuickWaveformKivy
-import plotQuickSpecKivy
-import plotQuickMusicSpecKivy
 import plotQuickSourceKivy
 import os
 from .tools import get_device_number
@@ -173,7 +170,8 @@ class HARK_Recognition(hark.NetworkDef):
         node_mel_filter_bank = network.create(hark.node.MelFilterBank)
         node_msls_extraction = network.create(hark.node.MSLSExtraction)
         node_pre_emphasis = network.create(hark.node.PreEmphasis)
-        node_spectral_mean_normalization_incremental = network.create(hark.node.SpectralMeanNormalizationIncremental)
+        node_spectral_mean_normalization_incremental = network.create(
+            hark.node.SpectralMeanNormalizationIncremental)
         node_speech_recognition_client = network.create(hark.node.SpeechRecognitionClient)
 
         # ノード間の接続（データの流れ）とパラメータを記述する
@@ -207,13 +205,13 @@ class HARK_Recognition(hark.NetworkDef):
         (
             node_feature_remover
             .add_input("INPUT", node_delta["OUTPUT"])
-            .add_input("SELECTOR", " ".join([str(c) for c in range(40, 81+1)]))
+            .add_input("SELECTOR", " ".join([str(c) for c in range(40, 81 + 1)]))
         )
         (
             node_spectral_mean_normalization_incremental
             .add_input("INPUT", node_feature_remover["OUTPUT"])
-            .add_input("NOT_EOF", True) # ToDo
-            .add_input("SM_HISTORY", False) # ToDo
+            .add_input("NOT_EOF", True)  # ToDo
+            .add_input("SM_HISTORY", False)  # ToDo
             .add_input("PERIOD", 1)
             .add_input("BASENAME", "")
             .add_input("OUTPUT_FNAME", "")
@@ -234,7 +232,7 @@ class HARK_Recognition(hark.NetworkDef):
             output
             .add_input("OUTPUT", node_feature_remover["OUTPUT"])
         )
-        
+
         # ネットワークに含まれるノードの一覧をリストにする
         r = [
             node_white_noise_adder,
