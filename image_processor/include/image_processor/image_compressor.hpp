@@ -10,7 +10,8 @@
 
 class ImageCompressor : public rclcpp::Node {
 public:
-  ImageCompressor(const std::string& topic_name) : Node("image_compressor") {
+  ImageCompressor(const std::string& topic_name, const std::string& node_name = "image_compressor")
+  : Node(node_name) {
     // パラメータを宣言
     this->declare_parameter<std::string>("input_topic", topic_name);
     std::string input_topic = this->get_parameter("input_topic").as_string();
@@ -28,7 +29,7 @@ private:
     // 画像データをOpenCVフォーマットに変換
     cv_bridge::CvImagePtr cv_ptr;
     try {
-        cv_ptr = cv_bridge::toCvCopy(msg, "bgr8");
+        cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
     } catch (cv_bridge::Exception& e) {
         RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
         return;
