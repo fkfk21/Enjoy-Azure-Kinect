@@ -13,4 +13,7 @@
       "${workspaceFolder}/image_processor/",
   ],
   "C_Cpp.default.compilerPath": "/usr/bin/g++",
+  "files.associations": {
+    "optional": "cpp"
+  },
 }

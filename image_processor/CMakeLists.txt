@@ -18,6 +18,8 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(fmt REQUIRED)
 
 
 #--- for C++
@@ -35,7 +37,8 @@ function(add_executable_custom exec_name source)
   install(TARGETS ${exec_name}
     DESTINATION lib/${PROJECT_NAME}
   )
-  # target_link_libraries()
+  target_link_libraries(${exec_name} ${OpenCV_LIBS} fmt::fmt)
+  target_include_directories(${exec_name} PUBLIC ${OpenCV_INCLUDE_DIRS})
 endfunction()
 
 add_executable_custom(compress_image_node main/compress_image_node.cpp)

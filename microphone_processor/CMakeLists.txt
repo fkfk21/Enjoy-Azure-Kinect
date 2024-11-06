@@ -46,6 +46,7 @@ install(PROGRAMS
   scripts/online_sound_localization.py
   scripts/show_audio_devices.py
   scripts/py_node.py
+  scripts/sound.launch.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 #--- end Python

@@ -14,6 +14,7 @@ int main(int argc, char **argv){
     std::vector<std::shared_ptr<rclcpp::Node>> nodes = {
         // std::make_shared<ImageCompressor>("/rgb/image_raw", "rgb_compressor"),
         std::make_shared<ImageCompressor>("/depth/image_raw", "depth_compressor"),
+        std::make_shared<ImageCompressor>("/result/image_raw", "result_compressor"),
         std::make_shared<ImageCompressor>("/depth_to_rgb/image_raw", "depth_to_rgb_compressor"),
     };
 

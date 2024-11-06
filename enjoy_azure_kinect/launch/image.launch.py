@@ -15,9 +15,9 @@ def generate_launch_description():
       output='screen'
     ),
     Node(
-      package='microphone_processor',
-      executable='online_sound_localization.py',
-      name='online_sound_localization',
+      package='image_processor',
+      executable='extract_target_node',
+      name='extract_target_node',
       output='screen'
     ),
   ])

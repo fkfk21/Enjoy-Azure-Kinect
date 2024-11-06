@@ -1,3 +1,27 @@
+# Execution
+
+```bash
+cd ~/rogy_ws/azure_ws/src/Enjoy_Azure_Kinect_Viewer && docker compose up -d
+bass source ~/rogy_ws/azure_ws/install/local_setup.bash
+ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=15 point_cloud:=false  rgb_point_cloud:=false
+```
+
+```bash
+bass source ~/rogy_ws/azure_ws/install/local_setup.bash
+ros2 run enjoy_azure_kinect image.launch.py
+```
+
+```bash
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+```
+
+```bash
+bass source ~/rogy_ws/azure_ws/install/local_setup.bash
+ros2 run microphone_processor sound.launch.sh
+```
+
+
+
 # Setup
 
 ## install azure kinect sdk
